@@ -1,6 +1,6 @@
 # BSD 3-Clause License; see https://github.com/jpivarski/awkward-1.0/blob/master/LICENSE
 
-cmake_minimum_required(VERSION 3.10...3.17)
+cmake_minimum_required(VERSION 3.13...3.18)
 
 # Project must be near the top
 project(awkward LANGUAGES CXX)
@@ -14,12 +14,8 @@ else()
   message(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
 endif()
 
-# This is a C++11 project, but Windows starts at C++14.
-if(MSVC)
-  set(CMAKE_CXX_STANDARD 14)
-else()
-  set(CMAKE_CXX_STANDARD 11)
-endif()
+# This is a C++11 project, but Windows treats 11 as C++14
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -40,6 +36,16 @@ include_directories(include)
 # C++ dependencies (header-only): RapidJSON and pybind11.
 include_directories(rapidjson/include)
 
+# Helpers for all targets
+add_library(awkward-extra-helpers INTERFACE)
+# On MSVC 2019, you need to add these flags to avoid
+# requiring the "patch addition" of VCRUNTIME140_1.dll,
+# which older redistributable installs may not have
+# See https://github.com/joerick/cibuildwheel/issues/423
+set(msvc2019_genex "$<$<CXX_COMPILER_ID:MSVC>:$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,1920>>")
+target_compile_options(awkward-extra-helpers INTERFACE "$<${msvc2019_genex}:d2FH4->")
+target_link_options(awkward-extra-helpers INTERFACE "$<${msvc2019_genex}:-d2\:-FH4->")
+
 # Macro to add C++ tests (part of CMake build, distinct from pytests in Python).
 include(CTest)
 
@@ -59,6 +65,7 @@ set_target_properties(awkward-cpu-kernels-objects PROPERTIES POSITION_INDEPENDEN
 add_library(awkward-cpu-kernels-static STATIC $<TARGET_OBJECTS:awkward-cpu-kernels-objects>)
 set_property(TARGET awkward-cpu-kernels-static PROPERTY POSITION_INDEPENDENT_CODE ON)
 add_library(awkward-cpu-kernels        SHARED $<TARGET_OBJECTS:awkward-cpu-kernels-objects>)
+target_link_libraries(awkward-cpu-kernels PUBLIC awkward-extra-helpers)
 set_target_properties(awkward-cpu-kernels-objects PROPERTIES CXX_VISIBILITY_PRESET hidden)
 set_target_properties(awkward-cpu-kernels-objects PROPERTIES VISIBILITY_INLINES_HIDDEN ON)
 set_target_properties(awkward-cpu-kernels-static PROPERTIES CXX_VISIBILITY_PRESET hidden)
@@ -113,7 +120,7 @@ if (PYBUILD)
   pybind11_add_module(_ext ${LAYOUT_SOURCES})
   set_target_properties(_ext PROPERTIES CXX_VISIBILITY_PRESET hidden)
   set_target_properties(_ext PROPERTIES VISIBILITY_INLINES_HIDDEN ON)
-  target_link_libraries(_ext PRIVATE awkward-static)
+  target_link_libraries(_ext PRIVATE awkward-static awkward-extra-helpers)
   if (APPLE)
     set_target_properties(_ext PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "@loader_path")
   else()
