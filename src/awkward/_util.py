@@ -107,6 +107,30 @@ listtypes = (
 recordtypes = (ak.layout.RecordArray,)
 
 
+def regularize_path(path):
+    """
+    Converts pathlib Paths into plain string paths (for all versions of Python).
+    """
+    is_path = False
+
+    if isinstance(path, getattr(os, "PathLike", ())):
+        is_path = True
+        path = os.fspath(path)
+
+    elif hasattr(path, "__fspath__"):
+        is_path = True
+        path = path.__fspath__()
+
+    elif path.__class__.__module__ == "pathlib":
+        import pathlib
+
+        if isinstance(path, pathlib.Path):
+            is_path = True
+            path = str(path)
+
+    return is_path, path
+
+
 class Behavior(Mapping):
     def __init__(self, defaults, overrides):
         self.defaults = defaults
@@ -423,6 +447,10 @@ def maybe_wrap(content, behavior, highlevel):
         return ak._util.wrap(content, behavior)
     else:
         return content
+
+
+def maybe_wrap_like(content, array, behavior, highlevel):
+    return maybe_wrap(content, behaviorof(array, behavior=behavior), highlevel)
 
 
 def extra(args, kwargs, defaults):
